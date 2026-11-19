@@ -1,0 +1,371 @@
+/* ==========================================================================
+   STARR SAVERS — /css/layout.css
+   Page structure: sticky header, category rail, grids, footer,
+   mobile sticky bottom app bar and the admin shell.
+   Depends on tokens from theme.css.
+   ========================================================================== */
+
+/* ---------- Containers & page frame --------------------------------------- */
+.container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.container--narrow { max-width: 760px; }
+.container--form   { max-width: 520px; }
+
+.site-main { min-height: 60vh; padding-block: var(--space-4) var(--space-10); }
+@media (min-width: 768px) { .site-main { padding-block: var(--space-6) var(--space-16); } }
+
+/* On phones the fixed app bar needs room beneath the page content */
+body.has-appbar { padding-bottom: calc(var(--appbar-h) + var(--safe-bottom)); }
+@media (min-width: 900px) { body.has-appbar { padding-bottom: 0; } }
+
+.section { margin-block: var(--space-8); }
+.section__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-4); margin-bottom: var(--space-4);
+}
+.section__head h2 { margin: 0; }
+.section__link { font-weight: 600; font-size: var(--fs-sm); white-space: nowrap; }
+
+/* ==========================================================================
+   STICKY HEADER
+   ========================================================================== */
+.site-header {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  background: var(--color-cobalt);
+  color: var(--color-on-dark);
+  padding-top: var(--safe-top);
+  box-shadow: 0 2px 12px rgba(8, 44, 107, 0.25);
+}
+
+/* Slim promo / delivery strip (hidden on small phones to save height) */
+.topbar {
+  display: none;
+  background: var(--color-cobalt-dark);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+}
+.topbar__inner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); min-height: 32px;
+}
+.topbar a { color: #CFE0FF; }
+.topbar a:hover { color: #fff; }
+@media (min-width: 768px) { .topbar { display: block; } }
+
+.header-main {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "brand actions actions"
+    "search search search";
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding-block: var(--space-3);
+}
+
+.brand {
+  grid-area: brand;
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-family: var(--font-display); font-weight: 800;
+  font-size: 1.35rem; letter-spacing: -0.03em;
+  color: #fff;
+}
+.brand:hover { color: #fff; text-decoration: none; }
+.brand__mark {
+  width: 34px; height: 34px; border-radius: 10px;
+  display: grid; place-items: center;
+  background: var(--color-royal); color: #fff;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+.brand__mark svg { width: 20px; height: 20px; }
+.brand__sub { color: #9DB9F2; font-weight: 700; }
+
+.header-search { grid-area: search; position: relative; }
+
+.header-actions {
+  grid-area: actions;
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+/* Delivery pill: "Delivering to: ... · Bike 25 min" */
+.delivery-pill {
+  display: none;
+  align-items: center; gap: var(--space-2);
+  padding: 6px 12px; border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff; font-size: var(--fs-sm); font-weight: 500;
+  white-space: nowrap;
+}
+.delivery-pill:hover { background: rgba(255, 255, 255, 0.2); color: #fff; text-decoration: none; }
+.delivery-pill svg { width: 16px; height: 16px; color: var(--color-emerald); }
+
+@media (min-width: 900px) {
+  .header-main {
+    grid-template-columns: auto minmax(240px, 1fr) auto;
+    grid-template-areas: "brand search actions";
+    gap: var(--space-6);
+  }
+  .delivery-pill { display: inline-flex; }
+  .header-search { max-width: 640px; width: 100%; justify-self: center; }
+}
+
+/* ---------- Category rail (scrolls sideways on phones) ---------------------- */
+.catnav {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.catnav__list {
+  display: flex; align-items: center; gap: var(--space-2);
+  min-height: var(--catnav-h);
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  padding-block: 6px;
+  scroll-snap-type: x proximity;
+}
+.catnav__list::-webkit-scrollbar { display: none; }
+.catnav__list > * { flex: 0 0 auto; scroll-snap-align: start; }
+
+/* ==========================================================================
+   HERO
+   ========================================================================== */
+.hero {
+  position: relative; overflow: hidden;
+  display: grid; gap: var(--space-4);
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(30, 100, 240, 0.65) 0%, rgba(30, 100, 240, 0) 55%),
+    linear-gradient(135deg, var(--color-cobalt-dark) 0%, var(--color-cobalt) 100%);
+  color: #fff;
+}
+.hero h1 { color: #fff; font-size: clamp(1.6rem, 5.5vw, 2.75rem); max-width: 18ch; }
+.hero p  { color: #D6E4FF; max-width: 46ch; }
+.hero__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+@media (min-width: 768px) {
+  .hero { padding: var(--space-12) var(--space-10); grid-template-columns: 1.2fr 1fr; align-items: center; }
+}
+
+/* Row of delivery promises under the hero */
+.promise-row {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+@media (min-width: 768px) { .promise-row { grid-template-columns: repeat(4, 1fr); } }
+
+/* ==========================================================================
+   PRODUCT GRIDS
+   2 columns on phones (Sixty60-style), scaling up with the viewport.
+   ========================================================================== */
+.grid-products {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+@media (min-width: 600px)  { .grid-products { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); } }
+@media (min-width: 900px)  { .grid-products { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .grid-products { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+/* Horizontal product shelf (flash deals, featured) */
+.shelf {
+  display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 44%);
+  gap: var(--space-3);
+  overflow-x: auto; padding-bottom: var(--space-2);
+  scroll-snap-type: x mandatory; scrollbar-width: none;
+  margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter);
+}
+.shelf::-webkit-scrollbar { display: none; }
+.shelf > * { scroll-snap-align: start; }
+@media (min-width: 600px)  { .shelf { grid-auto-columns: minmax(180px, 28%); } }
+@media (min-width: 900px)  { .shelf { grid-auto-columns: minmax(200px, 20%); margin-inline: 0; padding-inline: 0; } }
+
+.grid-categories {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3);
+}
+@media (min-width: 600px)  { .grid-categories { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px)  { .grid-categories { grid-template-columns: repeat(5, 1fr); } }
+
+/* Catalogue page: filters + results */
+.catalogue { display: grid; gap: var(--space-4); }
+@media (min-width: 900px) {
+  .catalogue { grid-template-columns: 260px minmax(0, 1fr); align-items: start; gap: var(--space-6); }
+  .catalogue__filters {
+    position: sticky;
+    top: calc(var(--header-h) + var(--catnav-h) + var(--space-4));
+  }
+}
+
+/* ==========================================================================
+   SPLIT LAYOUTS (product page, cart, checkout)
+   ========================================================================== */
+.split { display: grid; gap: var(--space-6); }
+@media (min-width: 900px) {
+  .split--product  { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: var(--space-10); }
+  .split--checkout { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); align-items: start; gap: var(--space-8); }
+}
+.sticky-summary { }
+@media (min-width: 900px) {
+  .sticky-summary { position: sticky; top: calc(var(--header-h) + var(--space-4)); }
+}
+
+.form-grid { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
+@media (min-width: 600px) {
+  .form-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .form-grid .span-all { grid-column: 1 / -1; }
+}
+
+/* ==========================================================================
+   FOOTER (carries the SA legal links — ECTA / CPA / POPIA)
+   ========================================================================== */
+.site-footer {
+  background: var(--color-cobalt-dark);
+  color: #C5D6F7;
+  padding-block: var(--space-10) var(--space-6);
+  font-size: var(--fs-sm);
+}
+.site-footer a { color: #E6EEFF; }
+.site-footer a:hover { color: #fff; }
+.site-footer h4 { color: #fff; font-size: var(--fs-md); margin-bottom: var(--space-3); }
+
+.footer-grid { display: grid; gap: var(--space-6); grid-template-columns: 1fr 1fr; }
+.footer-grid > .footer-brand { grid-column: 1 / -1; }
+@media (min-width: 900px) {
+  .footer-grid { grid-template-columns: 1.6fr 1fr 1fr 1.2fr; gap: var(--space-8); }
+  .footer-grid > .footer-brand { grid-column: auto; }
+}
+.footer-links { display: grid; gap: var(--space-2); }
+
+.footer-legal {
+  margin-top: var(--space-8); padding-top: var(--space-5);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  display: grid; gap: var(--space-3); color: #9DB5E6; font-size: var(--fs-xs);
+}
+.footer-legal p { max-width: none; }
+.footer-pay { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+
+/* ==========================================================================
+   MOBILE STICKY BOTTOM APP BAR
+   Five tabs: Home · Shop · Deals · Cart · Account
+   Hidden from 900px up, where the header carries the navigation.
+   ========================================================================== */
+.app-bar {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  z-index: var(--z-appbar);
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  height: calc(var(--appbar-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  background: rgba(255, 255, 255, 0.96);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  backdrop-filter: saturate(160%) blur(12px);
+  border-top: 1px solid var(--color-border);
+  box-shadow: 0 -6px 20px rgba(11, 61, 145, 0.08);
+}
+.app-bar__item {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; min-width: 0;
+  color: var(--color-text-faint);
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.app-bar__item svg { width: 24px; height: 24px; transition: transform var(--dur-base) var(--ease-out); }
+.app-bar__item:hover { color: var(--color-royal); text-decoration: none; }
+.app-bar__item.is-active,
+.app-bar__item[aria-current="page"] { color: var(--color-royal); }
+.app-bar__item.is-active svg,
+.app-bar__item[aria-current="page"] svg { transform: translateY(-1px) scale(1.06); }
+.app-bar__item.is-active::before,
+.app-bar__item[aria-current="page"]::before {
+  content: ""; position: absolute; top: 0; left: 28%; right: 28%; height: 3px;
+  background: var(--color-royal); border-radius: 0 0 3px 3px;
+}
+
+/* Deals tab uses amber so it reads as the "punchy" action */
+.app-bar__item--deals { color: var(--color-amber-dark); }
+.app-bar__item--deals svg { color: var(--color-amber); }
+
+/* Live cart count on the Cart tab */
+.app-bar__badge {
+  position: absolute; top: 6px; left: calc(50% + 6px);
+  min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center;
+  background: var(--color-royal); color: #fff;
+  border-radius: var(--radius-pill);
+  font-size: 0.6875rem; font-weight: 700; line-height: 1;
+  border: 2px solid #fff;
+}
+.app-bar__badge:empty, .app-bar__badge[data-count="0"] { display: none; }
+
+@media (min-width: 900px) { .app-bar { display: none; } }
+
+/* When the cart page has its own sticky checkout CTA, lift it above the app bar */
+.sticky-cta {
+  position: fixed; left: 0; right: 0;
+  bottom: calc(var(--appbar-h) + var(--safe-bottom));
+  z-index: calc(var(--z-appbar) - 1);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3) var(--gutter);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  box-shadow: 0 -8px 24px rgba(11, 61, 145, 0.10);
+}
+@media (min-width: 900px) { .sticky-cta { display: none; } }
+
+/* ==========================================================================
+   ACCOUNT AREA
+   ========================================================================== */
+.account-layout { display: grid; gap: var(--space-4); }
+@media (min-width: 900px) { .account-layout { grid-template-columns: 240px minmax(0, 1fr); gap: var(--space-8); align-items: start; } }
+
+/* ==========================================================================
+   ADMIN SHELL  (/admin/*)
+   ========================================================================== */
+.admin-body { background: var(--color-canvas); }
+.admin-shell { display: grid; min-height: 100vh; grid-template-rows: auto 1fr; }
+.admin-topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3) var(--gutter);
+  background: var(--color-cobalt); color: #fff;
+  position: sticky; top: 0; z-index: var(--z-sticky);
+}
+.admin-topbar .brand { font-size: 1.15rem; }
+.admin-main { display: grid; grid-template-columns: 1fr; }
+.admin-nav {
+  display: flex; gap: var(--space-1); overflow-x: auto; padding: var(--space-2) var(--gutter);
+  background: var(--color-surface); border-bottom: 1px solid var(--color-border);
+  scrollbar-width: none;
+}
+.admin-nav::-webkit-scrollbar { display: none; }
+.admin-nav a {
+  flex: 0 0 auto; padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm);
+  color: var(--color-text-muted); font-weight: 600; font-size: var(--fs-sm);
+}
+.admin-nav a:hover { background: var(--color-canvas); text-decoration: none; }
+.admin-nav a.is-active { background: var(--color-royal-soft); color: var(--color-royal); }
+.admin-content { padding: var(--space-5) var(--gutter) var(--space-10); min-width: 0; }
+
+@media (min-width: 900px) {
+  .admin-main { grid-template-columns: 232px minmax(0, 1fr); }
+  .admin-nav {
+    flex-direction: column; overflow: visible; padding: var(--space-4);
+    border-bottom: 0; border-right: 1px solid var(--color-border); min-height: calc(100vh - 56px);
+  }
+  .admin-nav a { padding: var(--space-3) var(--space-4); }
+  .admin-content { padding: var(--space-8) var(--space-8) var(--space-12); }
+}
+
+.stat-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 900px) { .stat-grid { grid-template-columns: repeat(4, 1fr); gap: var(--space-4); } }
+
+/* ---------- Print (order confirmations, invoices) --------------------------- */
+@media print {
+  .site-header, .app-bar, .sticky-cta, .site-footer, .admin-nav, .admin-topbar, .no-print { display: none !important; }
+  body { background: #fff; padding-bottom: 0 !important; }
+  .card { box-shadow: none; border: 1px solid #ccc; }
+}

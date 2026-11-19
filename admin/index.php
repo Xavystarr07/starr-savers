@@ -1,0 +1,382 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../php/mail-helper.php';
+
+// ---- Guard first (the layout include also guards, but POST handling happens before output) ----
+start_session();
+$admin = require_admin();
+
+$orderId = (int) ($_GET['order'] ?? 0);
+
+// ===========================================================================
+// POST ACTIONS
+// ===========================================================================
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $id   = (int) ($_POST['order_id'] ?? 0);
+    $back = '/admin/index.php?order=' . $id;
+    if (!csrf_verify()) {
+        flash_set('error', 'Your session expired. Please try again.');
+        header('Location: ' . $back); exit;
+    }
+
+    $pdo = db();
+    $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $id]);
+    $o = $stmt->fetch();
+    if (!$o) {
+        flash_set('error', 'Order not found.');
+        header('Location: /admin/index.php'); exit;
+    }
+
+    $action = (string) ($_POST['action'] ?? '');
+    $closed = in_array($o['status'], ['cancelled', 'refunded'], true);
+    $msg = null; $type = 'success'; $notify = null;
+
+    try {
+        switch ($action) {
+
+            case 'confirm_payment':          // EFT verified against the bank statement
+                if ($o['payment_method'] !== 'eft' || !in_array($o['payment_status'], ['pending', 'awaiting_verification'], true) || $closed) {
+                    throw new RuntimeException('This order cannot be marked as paid.');
+                }
+                $pdo->prepare("UPDATE orders SET payment_status = 'paid', status = IF(status = 'pending', 'confirmed', status) WHERE id = :id")->execute([':id' => $id]);
+                $msg = 'Payment confirmed. The order is now confirmed.';
+                $notify = ['Payment confirmed', 'We have received and verified your EFT payment of <strong>' . e(zar((float) $o['total'])) . '</strong>. We are getting your order ready now.'];
+                break;
+
+            case 'reject_pop':
+                $reason = mb_substr(trim((string) ($_POST['reason'] ?? '')), 0, 300);
+                if ($o['payment_method'] !== 'eft' || $closed || $o['payment_status'] === 'paid') {
+                    throw new RuntimeException('Nothing to reject on this order.');
+                }
+                $pdo->prepare("UPDATE orders SET payment_status = 'pending', admin_notes = CONCAT(IFNULL(admin_notes,''), :n) WHERE id = :id")
+                    ->execute([':n' => "\n[" . date('Y-m-d H:i') . '] Proof of payment rejected' . ($reason !== '' ? ': ' . $reason : '.'), ':id' => $id]);
+                $msg = 'Proof of payment rejected and the customer was emailed.';
+                $notify = ['We could not verify your payment', 'We could not match your proof of payment to a deposit.' . ($reason !== '' ? ' <em>' . e($reason) . '</em>' : '') . ' Please check the details and upload a new proof of payment from your order page.'];
+                break;
+
+            case 'set_status':
+                $new = (string) ($_POST['status'] ?? '');
+                $allowed = ['pending', 'confirmed', 'packing'];
+                $allowed = array_merge($allowed, $o['delivery_method'] === 'collect' ? ['ready_for_collection', 'collected'] : ['out_for_delivery', 'delivered']);
+                if ($closed) { throw new RuntimeException('This order is closed and cannot change status.'); }
+                if (!in_array($new, $allowed, true)) { throw new RuntimeException('That status does not apply to this order.'); }
+                if ($new !== 'pending' && $o['payment_status'] !== 'paid') {
+                    throw new RuntimeException('Confirm the payment first. Unpaid orders cannot be packed or shipped.');
+                }
+                $pdo->prepare('UPDATE orders SET status = :s WHERE id = :id')->execute([':s' => $new, ':id' => $id]);
+                $msg = 'Status updated to “' . order_status_label($new) . '”.';
+                $notify = [
+                    'confirmed'            => ['Order confirmed', 'Your order is confirmed and will be packed shortly.'],
+                    'out_for_delivery'     => ['Your order is on its way', 'Your order has left our branch and is on its way to you.'],
+                    'delivered'            => ['Delivered', 'Your order has been delivered. We hope you enjoy it! If anything is not right, reply to this email within 48 hours.'],
+                    'ready_for_collection' => ['Ready to collect', 'Your order is packed and ready to collect from the store. Please bring your order number.'],
+                ][$new] ?? null;
+                break;
+
+            case 'cancel':
+                if ($closed || in_array($o['status'], ['delivered', 'collected'], true)) {
+                    throw new RuntimeException('This order can no longer be cancelled. Use “Refund” for completed orders.');
+                }
+                $pdo->beginTransaction();
+                $pdo->prepare("UPDATE orders SET status = 'cancelled', admin_notes = CONCAT(IFNULL(admin_notes,''), :n) WHERE id = :id")
+                    ->execute([':n' => "\n[" . date('Y-m-d H:i') . '] Cancelled by admin.', ':id' => $id]);
+                restock_order($id);
+                $pdo->commit();
+                $msg = 'Order cancelled and stock returned to the shelf.' . ($o['payment_status'] === 'paid' ? ' This order was PAID: remember to refund the customer, then press “Mark refunded”.' : '');
+                $notify = ['Order cancelled', 'Your order has been cancelled.' . ($o['payment_status'] === 'paid' ? ' We will refund your payment and let you know when it is done.' : '')];
+                break;
+
+            case 'refund':
+                if ($o['status'] === 'refunded') { throw new RuntimeException('Already marked as refunded.'); }
+                $restock = !empty($_POST['restock']) && $o['status'] !== 'cancelled';   // cancelled orders were already restocked
+                $pdo->beginTransaction();
+                $pdo->prepare("UPDATE orders SET status = 'refunded', payment_status = 'refunded', admin_notes = CONCAT(IFNULL(admin_notes,''), :n) WHERE id = :id")
+                    ->execute([':n' => "\n[" . date('Y-m-d H:i') . '] Marked refunded.' . ($restock ? ' Stock returned.' : ''), ':id' => $id]);
+                if ($restock) { restock_order($id); }
+                $pdo->commit();
+                $msg = 'Marked as refunded. (This does not send money — refund the customer in Paystack or your bank first.)';
+                $notify = ['Refund processed', 'We have refunded <strong>' . e(zar((float) $o['total'])) . '</strong> for this order. Card refunds can take 5–10 business days to appear.'];
+                break;
+
+            case 'save_notes':
+                $pdo->prepare('UPDATE orders SET admin_notes = :n WHERE id = :id')->execute([':n' => mb_substr(trim((string) ($_POST['admin_notes'] ?? '')), 0, 4000) ?: null, ':id' => $id]);
+                $msg = 'Notes saved.';
+                break;
+
+            default:
+                throw new RuntimeException('Unknown action.');
+        }
+
+        if (!empty($notify) && !empty($_POST['notify'])) {
+            $fresh = $pdo->prepare('SELECT * FROM orders WHERE id = :id'); $fresh->execute([':id' => $id]);
+            send_order_status_update($fresh->fetch(), $notify[0], $notify[1]);
+        }
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        $type = 'error';
+        $msg = $e instanceof RuntimeException ? $e->getMessage() : 'Something went wrong. Nothing was changed.';
+        if (!($e instanceof RuntimeException)) { error_log('[StarrSavers][admin-order] ' . $e->getMessage()); }
+    }
+
+    flash_set($type, (string) $msg);
+    header('Location: ' . $back);
+    exit;
+}
+
+// ===========================================================================
+// PAGE
+// ===========================================================================
+$adminTitle = $orderId ? 'Order' : 'Orders';
+$adminNav = 'orders';
+require __DIR__ . '/_header.php';
+
+// ---------------------------------------------------------------- DETAIL VIEW
+if ($orderId):
+    $stmt = db()->prepare('SELECT o.*, b.name AS branch_name FROM orders o LEFT JOIN branches b ON b.id = o.branch_id WHERE o.id = :id');
+    $stmt->execute([':id' => $orderId]);
+    $o = $stmt->fetch();
+    if (!$o): ?>
+      <div class="empty-state"><h2>Order not found</h2><a class="btn" href="/admin/index.php">Back to orders</a></div>
+<?php else:
+        $items  = order_items_for($orderId);
+        $closed = in_array($o['status'], ['cancelled', 'refunded'], true);
+        $statuses = ['pending', 'confirmed', 'packing'];
+        $statuses = array_merge($statuses, $o['delivery_method'] === 'collect' ? ['ready_for_collection', 'collected'] : ['out_for_delivery', 'delivered']);
+?>
+      <p style="margin-bottom:12px"><a href="/admin/index.php">&larr; All orders</a></p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
+        <div>
+          <h1 style="font-size:var(--fs-2xl)"><?= e($o['order_number']) ?></h1>
+          <p class="text-muted text-sm">Placed <?= e(fmt_date($o['created_at'])) ?> · <?= e(strtoupper((string) $o['payment_method'])) ?> · <?= e(fulfilment_label($o)) ?></p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><?= status_pill('order', (string) $o['status']) ?> <?= status_pill('payment', (string) $o['payment_status']) ?></div>
+      </div>
+
+<?php if (str_contains((string) $o['admin_notes'], 'MISMATCH') || str_contains((string) $o['admin_notes'], 'PAID AFTER')): ?>
+      <div class="alert alert--error" style="margin-bottom:16px"><?= icon('alert') ?><span><strong>Needs attention:</strong> see the notes below before fulfilling this order.</span></div>
+<?php endif; ?>
+
+      <div class="split split--checkout">
+        <div>
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Items</h2>
+            <div class="table-wrap" style="box-shadow:none;border:1px solid var(--color-border-soft)">
+              <table class="table" style="min-width:480px">
+                <thead><tr><th>Product</th><th>Size</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead>
+                <tbody>
+<?php foreach ($items as $it): ?>
+                  <tr><td><?= e($it['product_name']) ?><br><span class="text-xs text-muted"><?= e($it['sku']) ?></span></td><td><?= e($it['size'] ?: '—') ?></td>
+                      <td class="num"><?= (int) $it['quantity'] ?></td><td class="num"><?= e(zar((float) $it['unit_price'])) ?></td><td class="num"><?= e(zar((float) $it['line_total'])) ?></td></tr>
+<?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+            <dl class="summary" style="margin-top:16px;max-width:360px;margin-left:auto">
+              <div class="summary__row"><dt>Subtotal</dt><dd><?= e(zar((float) $o['subtotal'])) ?></dd></div>
+              <div class="summary__row"><dt>Delivery (<?= e(fulfilment_label($o)) ?>)</dt><dd><?= e(zar((float) $o['delivery_fee'])) ?></dd></div>
+              <div class="summary__row"><dt>VAT included</dt><dd><?= e(zar((float) $o['vat_amount'])) ?></dd></div>
+            </dl>
+            <div class="summary__total" style="margin-top:12px;max-width:360px;margin-left:auto"><span>Total</span><span><?= e(zar((float) $o['total'])) ?></span></div>
+            <p class="text-xs text-muted" style="text-align:right;margin-top:6px">Total weight <?= e(number_format((float) $o['total_weight_kg'], 1)) ?> kg</p>
+          </section>
+
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Customer &amp; delivery</h2>
+            <p><strong><?= e($o['customer_name']) ?></strong><br>
+              <a href="mailto:<?= e($o['customer_email']) ?>"><?= e($o['customer_email']) ?></a><br>
+              <a href="tel:<?= e($o['customer_phone']) ?>"><?= e($o['customer_phone']) ?></a></p>
+            <hr>
+<?php if ($o['delivery_method'] === 'collect'): ?>
+            <p><strong>Collection</strong> at <?= e((string) $o['branch_name']) ?></p>
+<?php else: ?>
+            <p><strong><?= e(fulfilment_label($o)) ?></strong> from <?= e((string) $o['branch_name']) ?> (<?= e((string) $o['delivery_distance_km']) ?> km)<br>
+              <?= e(implode(', ', array_filter([$o['delivery_address1'], $o['delivery_address2'], $o['delivery_suburb'], $o['delivery_city'], $o['delivery_postal_code']]))) ?>
+<?php if ($o['delivery_latitude'] !== null): ?><br><a href="https://www.google.com/maps?q=<?= e((string) $o['delivery_latitude']) ?>,<?= e((string) $o['delivery_longitude']) ?>" target="_blank" rel="noopener">Open in Google Maps</a><?php endif; ?></p>
+<?php if ($o['delivery_notes']): ?><p class="text-sm" style="margin-top:8px"><strong>Notes:</strong> <?= e($o['delivery_notes']) ?></p><?php endif; ?>
+<?php endif; ?>
+          </section>
+        </div>
+
+        <aside style="display:grid;gap:16px;align-content:start">
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Payment</h2>
+<?php if ($o['payment_method'] === 'eft'): ?>
+            <p class="text-sm">EFT reference: <strong><?= e((string) $o['eft_reference']) ?></strong><br>Amount due: <strong><?= e(zar((float) $o['total'])) ?></strong></p>
+<?php if ($o['pop_file_path']): ?>
+            <p style="margin-top:10px"><a class="btn btn--secondary btn--sm" href="/admin/pop.php?id=<?= (int) $o['id'] ?>" target="_blank" rel="noopener"><?= icon('upload') ?> View proof of payment</a><br>
+              <span class="text-xs text-muted">Uploaded <?= e(fmt_date($o['pop_uploaded_at'])) ?></span></p>
+<?php else: ?>
+            <p class="text-sm text-muted" style="margin-top:8px">No proof of payment uploaded yet.</p>
+<?php endif; ?>
+<?php if (!$closed && in_array($o['payment_status'], ['pending', 'awaiting_verification'], true)): ?>
+            <form method="post" style="margin-top:14px;display:grid;gap:10px">
+              <?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>">
+              <label class="check"><input type="checkbox" name="notify" value="1" checked><span>Email the customer</span></label>
+              <button class="btn btn--success btn--block" name="action" value="confirm_payment" type="submit" onclick="return confirm('Only confirm after you have seen the money in the bank account. Continue?')"><?= icon('check') ?> Payment received — confirm</button>
+              <input class="input" name="reason" placeholder="Reason if rejecting (optional)" maxlength="300">
+              <button class="btn btn--outline btn--block" name="action" value="reject_pop" type="submit">Reject proof of payment</button>
+            </form>
+<?php endif; ?>
+<?php else: ?>
+            <p class="text-sm">Paystack reference:<br><strong style="word-break:break-all"><?= e((string) $o['paystack_reference']) ?></strong></p>
+<?php if ($o['paystack_paid_at']): ?><p class="text-xs text-muted" style="margin-top:6px">Paid <?= e(fmt_date($o['paystack_paid_at'])) ?></p><?php endif; ?>
+            <p class="text-xs text-muted" style="margin-top:8px">Card payments are confirmed automatically by Paystack. Refunds must be done in your Paystack dashboard.</p>
+<?php endif; ?>
+          </section>
+
+<?php if (!$closed): ?>
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Order status</h2>
+            <form method="post" style="display:grid;gap:10px">
+              <?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>"><input type="hidden" name="action" value="set_status">
+              <select class="select" name="status" aria-label="Status">
+<?php foreach ($statuses as $s): ?><option value="<?= e($s) ?>"<?= $s === $o['status'] ? ' selected' : '' ?>><?= e(order_status_label($s)) ?></option><?php endforeach; ?>
+              </select>
+              <label class="check"><input type="checkbox" name="notify" value="1" checked><span>Email the customer about this change</span></label>
+              <button class="btn btn--block" type="submit">Update status</button>
+            </form>
+            <?php if ($o['payment_status'] !== 'paid'): ?><p class="text-xs text-muted" style="margin-top:8px">Unpaid orders can&rsquo;t move past “Pending”.</p><?php endif; ?>
+          </section>
+<?php endif; ?>
+
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Notes</h2>
+            <form method="post" style="display:grid;gap:10px">
+              <?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>"><input type="hidden" name="action" value="save_notes">
+              <textarea class="textarea" name="admin_notes" rows="4" maxlength="4000" aria-label="Internal notes"><?= e((string) $o['admin_notes']) ?></textarea>
+              <button class="btn btn--outline btn--block" type="submit">Save notes</button>
+            </form>
+          </section>
+
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Cancel / refund</h2>
+            <div style="display:grid;gap:10px">
+<?php if (!$closed && !in_array($o['status'], ['delivered', 'collected'], true)): ?>
+              <form method="post" onsubmit="return confirm('Cancel this order and return the stock?')">
+                <?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>"><input type="hidden" name="action" value="cancel"><input type="hidden" name="notify" value="1">
+                <button class="btn btn--danger btn--block" type="submit">Cancel order &amp; restock</button>
+              </form>
+<?php endif; ?>
+<?php if ($o['status'] !== 'refunded'): ?>
+              <form method="post" onsubmit="return confirm('Mark this order as refunded? Make sure the money has already been sent back.')" style="display:grid;gap:8px">
+                <?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>"><input type="hidden" name="action" value="refund"><input type="hidden" name="notify" value="1">
+                <?php if ($o['status'] !== 'cancelled'): ?><label class="check"><input type="checkbox" name="restock" value="1"><span>Goods came back — return stock</span></label><?php endif; ?>
+                <button class="btn btn--outline btn--block" type="submit">Mark refunded</button>
+              </form>
+<?php endif; ?>
+            </div>
+          </section>
+        </aside>
+      </div>
+<?php endif; ?>
+
+<?php
+// ---------------------------------------------------------------- LIST VIEW
+else:
+    $pdo = db();
+    $tab = (string) ($_GET['s'] ?? 'all');
+    $q   = trim((string) ($_GET['q'] ?? ''));
+    $page = max(1, (int) ($_GET['p'] ?? 1));
+    $per = 20;
+
+    $tabs = [
+        'all'    => ['All', '1=1'],
+        'verify' => ['To verify (EFT)', "payment_status = 'awaiting_verification' AND status NOT IN ('cancelled','refunded')"],
+        'unpaid' => ['Awaiting payment', "status = 'pending' AND payment_status IN ('pending','failed')"],
+        'active' => ['In progress', "status IN ('confirmed','packing','out_for_delivery','ready_for_collection')"],
+        'done'   => ['Completed', "status IN ('delivered','collected')"],
+        'closed' => ['Cancelled / refunded', "status IN ('cancelled','refunded')"],
+    ];
+    if (!isset($tabs[$tab])) { $tab = 'all'; }
+
+    $counts = [];
+    foreach ($tabs as $k => $t) {
+        $counts[$k] = (int) $pdo->query('SELECT COUNT(*) FROM orders WHERE ' . $t[1])->fetchColumn();
+    }
+
+    $stats = $pdo->query(
+        "SELECT
+           SUM(DATE(created_at) = CURDATE()) AS orders_today,
+           COALESCE(SUM(CASE WHEN payment_status = 'paid' AND status NOT IN ('cancelled','refunded') AND DATE(created_at) = CURDATE() THEN total END), 0) AS revenue_today,
+           COALESCE(SUM(CASE WHEN payment_status = 'paid' AND status NOT IN ('cancelled','refunded') AND created_at >= (NOW() - INTERVAL 30 DAY) THEN total END), 0) AS revenue_30
+         FROM orders"
+    )->fetch();
+    $lowStock = (int) $pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1 AND stock_qty <= low_stock_at')->fetchColumn();
+
+    $where = $tabs[$tab][1]; $params = [];
+    if ($q !== '') {
+        $where .= ' AND (order_number LIKE :q OR customer_name LIKE :q OR customer_email LIKE :q OR customer_phone LIKE :q)';
+        $params[':q'] = '%' . $q . '%';
+    }
+    $total = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE $where"); $total->execute($params);
+    $totalRows = (int) $total->fetchColumn();
+    $pages = max(1, (int) ceil($totalRows / $per));
+    $page = min($page, $pages);
+
+    $list = $pdo->prepare("SELECT * FROM orders WHERE $where ORDER BY created_at DESC, id DESC LIMIT $per OFFSET " . (($page - 1) * $per));
+    $list->execute($params);
+    $rows = $list->fetchAll();
+    $qs = static fn (array $extra): string => '?' . http_build_query(array_filter(['s' => $tab !== 'all' ? $tab : null, 'q' => $q ?: null] + $extra));
+?>
+      <h1 style="margin-bottom:16px">Orders</h1>
+
+      <div class="stat-grid" style="margin-bottom:20px">
+        <div class="stat"><div class="stat__label">Orders today</div><div class="stat__value"><?= (int) $stats['orders_today'] ?></div></div>
+        <div class="stat"><div class="stat__label">Paid revenue today</div><div class="stat__value"><?= e(zar((float) $stats['revenue_today'])) ?></div></div>
+        <div class="stat stat--accent"><div class="stat__label">Paid revenue (30 days)</div><div class="stat__value"><?= e(zar((float) $stats['revenue_30'])) ?></div></div>
+        <a class="stat" href="/admin/products.php?stock=low" style="text-decoration:none"><div class="stat__label">Low / out of stock</div><div class="stat__value" style="<?= $lowStock ? 'color:var(--color-danger)' : '' ?>"><?= $lowStock ?></div></a>
+      </div>
+
+<?php if ($counts['verify'] > 0): ?>
+      <div class="alert alert--warning" style="margin-bottom:16px"><?= icon('clock') ?><span><strong><?= $counts['verify'] ?></strong> EFT proof<?= $counts['verify'] === 1 ? '' : 's' ?> of payment waiting to be verified. <a href="/admin/index.php?s=verify">Review now</a></span></div>
+<?php endif; ?>
+
+      <div class="tabs" role="tablist" style="margin-bottom:16px">
+<?php foreach ($tabs as $k => $t): ?>
+        <a class="tab<?= $k === $tab ? ' is-active' : '' ?>" href="/admin/index.php<?= e($k === 'all' ? ($q ? '?q=' . rawurlencode($q) : '') : '?s=' . $k . ($q ? '&q=' . rawurlencode($q) : '')) ?>"><?= e($t[0]) ?> <span class="badge" style="margin-left:4px"><?= $counts[$k] ?></span></a>
+<?php endforeach; ?>
+      </div>
+
+      <form method="get" style="display:flex;gap:8px;margin-bottom:16px;max-width:520px">
+<?php if ($tab !== 'all'): ?><input type="hidden" name="s" value="<?= e($tab) ?>"><?php endif; ?>
+        <input class="input" type="search" name="q" value="<?= e($q) ?>" placeholder="Search order no., name, email or phone" aria-label="Search orders">
+        <button class="btn" type="submit">Search</button>
+      </form>
+
+<?php if (!$rows): ?>
+      <div class="empty-state"><?= icon('bag') ?><h2>No orders here yet</h2><p>New orders will appear as soon as customers check out.</p></div>
+<?php else: ?>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Fulfilment</th><th class="num">Total</th><th>Payment</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+<?php foreach ($rows as $r): ?>
+            <tr>
+              <td><a href="/admin/index.php?order=<?= (int) $r['id'] ?>"><strong><?= e($r['order_number']) ?></strong></a></td>
+              <td><?= e(fmt_date($r['created_at'])) ?></td>
+              <td><?= e($r['customer_name']) ?><br><span class="text-xs text-muted"><?= e($r['customer_phone']) ?></span></td>
+              <td><?= e(fulfilment_label($r)) ?></td>
+              <td class="num"><?= e(zar((float) $r['total'])) ?></td>
+              <td><?= status_pill('payment', (string) $r['payment_status']) ?><br><span class="text-xs text-muted"><?= e(strtoupper((string) $r['payment_method'])) ?></span></td>
+              <td><?= status_pill('order', (string) $r['status']) ?></td>
+              <td><a class="btn btn--sm btn--secondary" href="/admin/index.php?order=<?= (int) $r['id'] ?>">Open</a></td>
+            </tr>
+<?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+
+<?php if ($pages > 1): ?>
+      <nav class="pagination" aria-label="Pages">
+<?php for ($i = 1; $i <= $pages; $i++): ?>
+        <?= $i === $page ? '<span class="is-current">' . $i . '</span>' : '<a href="/admin/index.php' . e($qs(['p' => $i])) . '">' . $i . '</a>' ?>
+<?php endfor; ?>
+      </nav>
+<?php endif; ?>
+<?php endif; ?>
+<?php endif; ?>
+
+<?php require __DIR__ . '/_footer.php'; ?>

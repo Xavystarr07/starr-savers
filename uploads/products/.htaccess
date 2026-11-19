@@ -1,0 +1,5 @@
+# Product photos only: never run scripts from this folder, never list it.
+Options -Indexes
+<FilesMatch "\.(php|phtml|php[0-9]|phar|pl|cgi|sh)$">
+  Require all denied
+</FilesMatch>
