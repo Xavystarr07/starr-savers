@@ -22,7 +22,6 @@ $metaDesc    = $metaDesc ?? 'Groceries, everyday essentials and clothing deliver
 $nav         = $nav ?? '';
 $noIndex     = $noIndex ?? false;
 $threshold   = (float) setting('free_delivery_threshold', '0');
-$minBikeFee  = db()->query('SELECT MIN(bike_fee) FROM delivery_zones WHERE is_active = 1 AND bike_fee IS NOT NULL')->fetchColumn();
 $categories  = db()->query('SELECT id, name, slug, icon, is_virtual FROM categories WHERE is_active = 1 ORDER BY sort_order')->fetchAll();
 $activeCat   = (string) ($_GET['cat'] ?? '');
 $dealsActive = isset($_GET['deal']);
@@ -58,16 +57,19 @@ $favicon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title><?= e($fullTitle) ?></title>
   <meta name="description" content="<?= e($metaDesc) ?>">
-  <meta name="theme-color" content="#0B3D91">
+  <meta name="theme-color" content="#FFFFFF">
   <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
+<?php require_once __DIR__ . '/seo.php'; seo_head($fullTitle, $metaDesc); ?>
 <?php if ($noIndex): ?>  <meta name="robots" content="noindex, nofollow">
 <?php endif; ?>
   <link rel="icon" href="<?= $favicon ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap">
   <link rel="stylesheet" href="<?= e($assetVer('/css/theme.css')) ?>">
   <link rel="stylesheet" href="<?= e($assetVer('/css/layout.css')) ?>">
   <link rel="stylesheet" href="<?= e($assetVer('/css/components.css')) ?>">
+  <link rel="stylesheet" href="<?= e($assetVer('/css/redesign.css')) ?>">
   <script>window.STARR = <?= json_encode($clientConfig, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;</script>
 </head>
 <body class="has-appbar">
@@ -75,18 +77,8 @@ $favicon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
 <noscript><div class="noscript-banner">Please turn on JavaScript to use the cart and checkout.</div></noscript>
 
 <header class="site-header">
-  <div class="topbar">
-    <div class="container topbar__inner">
-      <span><?= icon('bike', 'icon-inline') ?> <?php if ($minBikeFee !== false && $minBikeFee !== null): ?>Bike delivery from <?= e(zar((float) $minBikeFee)) ?><?php else: ?>Fast local delivery<?php endif; ?><?php if ($threshold > 0): ?> &middot; Free delivery over <?= e(zar($threshold)) ?><?php endif; ?></span>
-      <span><a href="/legal.php#returns">Easy returns</a> &nbsp;&middot;&nbsp; <a href="/legal.php#delivery">Delivery info</a> &nbsp;&middot;&nbsp; <a href="mailto:<?= e((string) setting('store_email')) ?>">Help</a></span>
-    </div>
-  </div>
-
   <div class="container header-main">
-    <a class="brand" href="/index.php" aria-label="<?= e($storeName) ?> home">
-      <span class="brand__mark"><?= icon('star') ?></span>
-      <span><?= e($storeName) ?></span>
-    </a>
+    <a class="brand" href="/index.php" aria-label="<?= e($storeName) ?> home"><span><?= e($storeName) ?></span></a>
 
     <form class="header-search" role="search" action="/index.php#shop" method="get">
       <div class="search">
@@ -97,6 +89,7 @@ $favicon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
 
     <div class="header-actions">
       <a class="delivery-pill" href="/legal.php#delivery"><?= icon('bike') ?> <span>Bike delivery in minutes</span></a>
+      <a class="icon-btn" href="/wishlist.php" aria-label="Wishlist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg><span class="icon-btn__count" data-wish-count data-count="0"></span></a>
       <a class="icon-btn" href="/account.php" aria-label="<?= $user ? 'My account' : 'Log in or register' ?>"><?= icon('user') ?></a>
       <a class="icon-btn" href="/cart.php" aria-label="Cart">
         <?= icon('cart') ?>
@@ -108,12 +101,12 @@ $favicon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
   <nav class="catnav" aria-label="Categories">
     <div class="container">
       <div class="catnav__list">
-        <a class="chip<?= ($activeCat === '' && !$dealsActive && ($nav === 'home' || $nav === 'shop')) ? ' is-active' : '' ?>" href="/index.php#shop"><?= icon('grid') ?>All</a>
+        <a class="chip<?= ($activeCat === '' && !$dealsActive && ($nav === 'home' || $nav === 'shop')) ? ' is-active' : '' ?>" href="/index.php#shop">All</a>
 <?php foreach ($categories as $c): ?>
 <?php if ((int) $c['is_virtual'] === 1): ?>
         <a class="chip chip--deal<?= $dealsActive ? ' is-active' : '' ?>" href="/index.php?deal=1#shop"><?= icon('bolt') ?><?= e($c['name']) ?></a>
 <?php else: ?>
-        <a class="chip<?= $activeCat === $c['slug'] ? ' is-active' : '' ?>" href="/index.php?cat=<?= e(rawurlencode((string) $c['slug'])) ?>#shop"><?= icon((string) ($c['icon'] ?: 'bag')) ?><?= e($c['name']) ?></a>
+        <a class="chip<?= $activeCat === $c['slug'] ? ' is-active' : '' ?>" href="/index.php?cat=<?= e(rawurlencode((string) $c['slug'])) ?>#shop"><?= e($c['name']) ?></a>
 <?php endif; ?>
 <?php endforeach; ?>
       </div>

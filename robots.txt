@@ -1,0 +1,15 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /php/
+Disallow: /config/
+Disallow: /uploads/pop/
+Disallow: /cart.php
+Disallow: /checkout.php
+Disallow: /account.php
+Disallow: /orders.php
+Disallow: /returns.php
+Disallow: /wishlist.php
+Disallow: /refund-slip.php
+
+# CHANGE THIS to your real address when you go live:
+Sitemap: https://YOUR-DOMAIN/sitemap.php

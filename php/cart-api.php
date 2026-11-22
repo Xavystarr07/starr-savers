@@ -177,13 +177,13 @@ function action_quote(): void
     }
 
     $fee    = !empty($delivery['available']) ? (float) $delivery['fee'] : 0.0;
-    $totals = order_totals((float) $priced['subtotal'], $fee);
+    require_once __DIR__ . '/coupon-helper.php'; $couponInfo = apply_coupon_code((string) ($d['coupon'] ?? ''), (float) $priced['subtotal']); $totals = order_totals_discounted((float) $priced['subtotal'], $fee, (float) $couponInfo['discount']);
 
     json_out([
         'ok'       => true,
         'mode'     => $mode,
         'delivery' => $delivery,
-        'totals'   => $totals,
+        'totals'   => $totals, 'coupon' => ['ok' => $couponInfo['ok'], 'message' => $couponInfo['message'], 'discount' => $couponInfo['discount'], 'code' => $couponInfo['code']],
         'weight'   => $priced['weight'],
         'count'    => $priced['count'],
         'issues'   => $priced['issues'],

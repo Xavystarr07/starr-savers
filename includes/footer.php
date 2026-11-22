@@ -25,9 +25,9 @@ $footerCats = $categories ?? [];
   <div class="container">
     <div class="footer-grid">
       <div class="footer-brand">
-        <a class="brand" href="/index.php"><span class="brand__mark"><?= icon('star') ?></span><span><?= e($storeName) ?></span></a>
-        <p style="margin-top:12px;max-width:38ch"><?= e((string) setting('store_tagline', '')) ?>. Groceries, essentials and clothing delivered across South Africa.</p>
-        <p style="margin-top:12px">
+        <a class="brand brand--light" href="/index.php"><span><?= e($storeName) ?></span></a>
+        <p style="margin-top:16px;max-width:36ch">Groceries, essentials and clothing delivered across South Africa.</p>
+        <p style="margin-top:16px">
           <a href="mailto:<?= e((string) setting('store_email')) ?>"><?= e((string) setting('store_email')) ?></a><br>
           <?= e((string) setting('store_phone')) ?>
         </p>
@@ -45,41 +45,29 @@ $footerCats = $categories ?? [];
       <div>
         <h4>Help</h4>
         <div class="footer-links">
-          <a href="/account.php">My account &amp; orders</a>
-          <a href="/legal.php#delivery">Delivery information</a>
+          <a href="/orders.php">My orders</a>
+          <a href="/returns.php">Returns</a>
+          <a href="/wishlist.php">Wishlist</a>
+          <a href="/faq.php">FAQ</a>
+          <a href="/contact.php">Contact us</a>
+          <a href="/legal.php#delivery">Delivery</a>
           <a href="/legal.php#returns">Returns &amp; refunds</a>
-          <a href="/legal.php#payments">Payment options</a>
-        </div>
-      </div>
-
-      <div>
-        <h4>Legal</h4>
-        <div class="footer-links">
-          <a href="/legal.php#terms">Terms &amp; conditions</a>
-          <a href="/legal.php#returns">Returns policy (CPA)</a>
-          <a href="/legal.php#privacy">Privacy notice (POPIA)</a>
-          <a href="/legal.php#company">Company details (ECTA)</a>
+          <a href="/legal.php#terms">Terms</a>
+          <a href="/legal.php#privacy">Privacy (POPIA)</a>
         </div>
       </div>
     </div>
 
     <div class="footer-legal">
-      <div class="footer-pay" aria-label="Payment methods">
-        <span class="badge badge--premium">Secure card payments by Paystack</span>
-        <span class="badge">Manual EFT</span>
+      <p><?= e((string) setting('legal_company_name')) ?> &middot; Reg. <?= e((string) setting('legal_reg_number')) ?> &middot; VAT <?= e((string) setting('vat_number')) ?> &middot; <?= e((string) setting('legal_physical_address')) ?> &middot; <a href="/legal.php#company">Company details</a></p>
+      <p>Prices are in ZAR and include VAT. Your Consumer Protection Act and ECTA rights apply. Information Officer: <a href="mailto:<?= e((string) setting('legal_information_email')) ?>"><?= e((string) setting('legal_information_email')) ?></a></p>
+      <div class="footer-bottom">
+        <span>&copy; <?= date('Y') ?> <?= e($storeName) ?></span>
+        <div class="footer-pay" aria-label="Payment methods">
+          <span class="badge">Card via Paystack</span>
+          <span class="badge">Manual EFT</span>
+        </div>
       </div>
-      <p>
-        <?= e((string) setting('legal_company_name')) ?> &middot; Reg. no. <?= e((string) setting('legal_reg_number')) ?>
-        &middot; VAT no. <?= e((string) setting('vat_number')) ?> &middot; <?= e((string) setting('legal_physical_address')) ?>.
-        All prices are in South African Rand (ZAR) and include VAT.
-      </p>
-      <p>
-        You have rights under the Consumer Protection Act and the Electronic Communications and Transactions Act, including a
-        cooling-off period for online purchases. See our <a href="/legal.php#returns">returns policy</a>.
-        We process personal information in line with POPIA; our Information Officer is reachable at
-        <a href="mailto:<?= e((string) setting('legal_information_email')) ?>"><?= e((string) setting('legal_information_email')) ?></a>.
-      </p>
-      <p>&copy; <?= date('Y') ?> <?= e($storeName) ?>. All rights reserved.</p>
     </div>
   </div>
 </footer>
@@ -97,12 +85,12 @@ $footerCats = $categories ?? [];
 
 <!-- POPIA: we only use essential storage (login session + your cart). Shown once. -->
 <div class="consent-banner" id="consent-banner" hidden>
-  <p class="text-sm">We use essential cookies and your browser&rsquo;s storage to keep your cart and login working. We do not use advertising trackers.
-    <a href="/legal.php#privacy">Privacy notice</a></p>
+  <p>We use essential cookies and browser storage to keep your cart and login working. No advertising trackers. <a href="/legal.php#privacy">Privacy notice</a></p>
   <button type="button" class="btn btn--sm" id="consent-ok">Got it</button>
 </div>
 
 <script src="<?= e($assetVer('/js/cart.js')) ?>"></script>
+<script src="<?= e($assetVer('/js/wishlist.js')) ?>"></script>
 <?php foreach ($scripts as $js): ?>
 <script src="<?= e($assetVer('/js/' . basename((string) $js))) ?>"></script>
 <?php endforeach; ?>

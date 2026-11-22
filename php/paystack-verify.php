@@ -38,6 +38,7 @@ if ($signature !== '') {
     $event = json_decode($rawBody, true);
     $ref   = is_array($event) ? (string) ($event['data']['reference'] ?? '') : '';
 
+    if (is_array($event) && str_starts_with((string) ($event['event'] ?? ''), 'refund.')) { try { require_once __DIR__ . '/refund-helper.php'; refund_webhook($event); } catch (Throwable $e) { error_log('[StarrSavers][refund-webhook] ' . $e->getMessage()); } }
     if (is_array($event) && ($event['event'] ?? '') === 'charge.success' && $ref !== '') {
         try {
             confirm_paystack_payment($ref);

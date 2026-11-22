@@ -137,7 +137,7 @@ function create_order(): void
         $lat = $lng = null;
     }
 
-    $totals = order_totals((float) $priced['subtotal'], $fee);
+    require_once __DIR__ . '/coupon-helper.php'; $couponInfo = apply_coupon_code((string) ($d['coupon'] ?? ''), (float) $priced['subtotal']); if (trim((string) ($d['coupon'] ?? '')) !== '' && !$couponInfo['ok']) { fail((string) $couponInfo['message'], 422, ['fields' => ['coupon' => (string) $couponInfo['message']]]); } $totals = order_totals_discounted((float) $priced['subtotal'], $fee, (float) $couponInfo['discount']);
     $user   = current_user();
 
     // ---- Write order + reserve stock in one transaction --------------------
@@ -160,7 +160,7 @@ function create_order(): void
              VALUES (:num, :uid, :bid, :cn, :ce, :cp,
                 :dm, :a1, :a2, :sub, :city, :prov,
                 :pc, :lat, :lng, :dist, :notes, :wt,
-                :subtotal, :fee, 0, :vat, :total, :pm, \'pending\', \'pending\', NOW())'
+                :subtotal, :fee, :disc, :vat, :total, :pm, \'pending\', \'pending\', NOW())'
         );
         $insert->execute([
             ':num' => $tempNumber, ':uid' => $user['id'] ?? null, ':bid' => $branchId,
@@ -175,7 +175,7 @@ function create_order(): void
             ':lat' => $lat, ':lng' => $lng, ':dist' => $distance,
             ':notes' => ($n = mb_substr(trim((string) ($d['notes'] ?? '')), 0, 255)) === '' ? null : $n,
             ':wt' => $priced['weight'],
-            ':subtotal' => $totals['subtotal'], ':fee' => $totals['delivery_fee'], ':vat' => $totals['vat'], ':total' => $totals['total'],
+            ':subtotal' => $totals['subtotal'], ':disc' => $totals['discount'], ':fee' => $totals['delivery_fee'], ':vat' => $totals['vat'], ':total' => $totals['total'],
             ':pm' => $method,
         ]);
         $orderId = (int) $pdo->lastInsertId();
@@ -204,6 +204,8 @@ function create_order(): void
         throw $e;
     }
 
+    if (!empty($couponInfo['ok']) && !empty($couponInfo['coupon'])) { try { record_coupon_redemption((int) $couponInfo['coupon']['id'], $orderId, (string) $couponInfo['coupon']['code'], (float) $couponInfo['discount']); } catch (Throwable $e) { error_log('[StarrSavers][coupon] ' . $e->getMessage()); } }
+    try { require_once __DIR__ . '/alerts-helper.php'; notify_low_stock($priced['lines']); } catch (Throwable $e) { error_log('[StarrSavers][stock-alert] ' . $e->getMessage()); }
     // ---- Save the address to the customer's profile the first time (saves typing next order)
     if ($user && $mode === 'delivery' && trim((string) ($user['address_line1'] ?? '')) === '') {
         try {

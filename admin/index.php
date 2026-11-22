@@ -176,6 +176,7 @@ if ($orderId):
             </div>
             <dl class="summary" style="margin-top:16px;max-width:360px;margin-left:auto">
               <div class="summary__row"><dt>Subtotal</dt><dd><?= e(zar((float) $o['subtotal'])) ?></dd></div>
+              <?php if ((float) $o['discount_amount'] > 0): ?><div class="summary__row"><dt>Discount</dt><dd>-<?= e(zar((float) $o['discount_amount'])) ?></dd></div><?php endif; ?>
               <div class="summary__row"><dt>Delivery (<?= e(fulfilment_label($o)) ?>)</dt><dd><?= e(zar((float) $o['delivery_fee'])) ?></dd></div>
               <div class="summary__row"><dt>VAT included</dt><dd><?= e(zar((float) $o['vat_amount'])) ?></dd></div>
             </dl>
@@ -253,6 +254,14 @@ if ($orderId):
 
           <section class="card">
             <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Cancel / refund</h2>
+            <?php require_once __DIR__ . '/../php/refund-helper.php'; ?>
+            <div style="display:grid;gap:8px;margin-bottom:12px">
+<?php if ($o['payment_status'] === 'paid'): ?>
+              <a class="btn btn--success btn--block" href="/admin/refunds.php?new=<?= (int) $o['id'] ?>"><?= icon('return') ?> Refund customer</a>
+<?php endif; foreach (refunds_for_order((int) $o['id']) as $rf): ?>
+              <a class="text-sm" href="/admin/refunds.php?id=<?= (int) $rf['id'] ?>"><?= e($rf['refund_number']) ?> &middot; <?= e(zar((float) $rf['amount'])) ?> &middot; <?= e(refund_label((string) $rf['status'])) ?></a>
+<?php endforeach; ?>
+            </div>
             <div style="display:grid;gap:10px">
 <?php if (!$closed && !in_array($o['status'], ['delivered', 'collected'], true)): ?>
               <form method="post" onsubmit="return confirm('Cancel this order and return the stock?')">

@@ -6,7 +6,7 @@ require_once __DIR__ . '/includes/helpers.php';
 $pageTitle = 'Checkout';
 $nav = 'cart';
 $noIndex = true;
-$scripts = ['delivery-calc.js', 'paystack-init.js'];
+$scripts = ['delivery-calc.js', 'suburbs.js', 'coupon.js', 'paystack-init.js'];
 
 start_session();
 $user = current_user();

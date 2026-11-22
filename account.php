@@ -94,8 +94,23 @@ if ($orderNumber !== ''):
       </div>
 <?php endif; ?>
 
+      <?php if (in_array($order['status'], ['pending', 'confirmed'], true)): ?>
+      <form method="post" action="/php/order-cancel.php" onsubmit="return confirm('Cancel this order?')" style="margin-bottom:16px"><?= csrf_field() ?><input type="hidden" name="order_number" value="<?= e($order['order_number']) ?>"><input type="hidden" name="t" value="<?= e($token) ?>"><button class="btn btn--outline btn--sm" type="submit">Cancel this order</button></form>
+<?php endif; ?>
       <div class="split split--checkout">
         <div>
+<?php require_once __DIR__ . '/php/refund-helper.php'; $orderRefunds = refunds_for_order((int) $order['id']); if ($orderRefunds): ?>
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:8px">Refunds</h2>
+<?php foreach ($orderRefunds as $rf): ?>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--color-border-soft);flex-wrap:wrap">
+              <span><strong><?= e($rf['refund_number']) ?></strong> <span class="text-muted text-sm">&middot; <?= e(zar((float) $rf['amount'])) ?></span><br><span class="pill pill--<?= e(refund_pill((string) $rf['status'])) ?>"><?= e(refund_label((string) $rf['status'])) ?></span>
+<?php if ($rf['status'] === 'processing'): ?> <span class="text-xs text-muted">Card refunds take 5 to 10 business days to reach your account.</span><?php endif; ?></span>
+<?php if ($rf['status'] !== 'failed'): ?><a class="btn btn--sm btn--outline" href="/refund-slip.php?r=<?= e(rawurlencode((string) $rf['refund_number'])) ?>&t=<?= e($token) ?>" target="_blank" rel="noopener">Refund slip</a><?php endif; ?>
+            </div>
+<?php endforeach; ?>
+          </section>
+<?php endif; ?>
 <?php if ($unpaid && $order['payment_method'] === 'paystack'): ?>
           <section class="card">
             <h2 style="font-size:var(--fs-lg);margin-bottom:8px">Complete your payment</h2>
@@ -151,6 +166,7 @@ if ($orderNumber !== ''):
             <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Summary</h2>
             <dl class="summary">
               <div class="summary__row"><dt>Subtotal</dt><dd><?= e(zar((float) $order['subtotal'])) ?></dd></div>
+<?php if ((float) $order['discount_amount'] > 0): ?>              <div class="summary__row summary__row--free"><dt>Discount</dt><dd>-<?= e(zar((float) $order['discount_amount'])) ?></dd></div><?php endif; ?>
               <div class="summary__row <?= (float) $order['delivery_fee'] <= 0 ? 'summary__row--free' : '' ?>"><dt><?= e(fulfilment_label($order)) ?></dt><dd><?= (float) $order['delivery_fee'] > 0 ? e(zar((float) $order['delivery_fee'])) : 'Free' ?></dd></div>
               <div class="summary__row"><dt>VAT included</dt><dd><?= e(zar((float) $order['vat_amount'])) ?></dd></div>
             </dl>
@@ -290,6 +306,7 @@ else:
         </div>
       </div>
 
+      <?php $accountNav = 'overview'; require __DIR__ . '/includes/account-nav.php'; ?>
       <section class="card" aria-labelledby="orders-title">
         <div class="card__title"><h2 id="orders-title" style="font-size:var(--fs-lg)">My orders</h2></div>
 <?php if (!$myOrders): ?>

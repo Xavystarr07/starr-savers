@@ -52,6 +52,7 @@ $rel->execute([':c' => $p['category_id'], ':id' => $p['id']]);
 $related = $rel->fetchAll();
 
 $pageTitle = (string) $p['name'];
+$seoProduct = ['name' => (string) $p['name'], 'description' => (string) ($p['short_desc'] ?: $p['name']), 'image' => $img, 'sku' => (string) $p['sku'], 'brand' => (string) ($p['brand'] ?? ''), 'price' => $price, 'inStock' => $inStock];
 $metaDesc  = (string) ($p['short_desc'] ?: $p['name'] . ' — ' . zar($price) . ' at ' . setting('store_name', 'Starr Savers'));
 $nav = 'shop';
 $scripts = ['filters.js'];   // for the deal countdown on related cards

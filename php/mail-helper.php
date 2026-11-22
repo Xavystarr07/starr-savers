@@ -135,6 +135,7 @@ function mail_order_table(array $order, array $items): string
 
     return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0">' . $rows
         . $line('Subtotal', e(zar((float) $order['subtotal'])))
+        . ((float) ($order['discount_amount'] ?? 0) > 0 ? $line('Discount', '-' . e(zar((float) $order['discount_amount']))) : '')
         . $line('Delivery', ((float) $order['delivery_fee']) > 0 ? e(zar((float) $order['delivery_fee'])) : 'Free')
         . $line('Total (incl. VAT)', e(zar((float) $order['total'])), true)
         . $line('VAT included', e(zar((float) $order['vat_amount'])))

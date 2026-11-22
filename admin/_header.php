@@ -67,6 +67,10 @@ $assetVer = static function (string $path): string {
     <nav class="admin-nav" aria-label="Admin">
       <a href="/admin/index.php" class="<?= $adminNav === 'orders' ? 'is-active' : '' ?>">Orders</a>
       <a href="/admin/products.php" class="<?= $adminNav === 'products' ? 'is-active' : '' ?>">Products</a>
+      <a href="/admin/coupons.php" class="<?= $adminNav === 'coupons' ? 'is-active' : '' ?>">Discounts</a>
+      <a href="/admin/returns.php" class="<?= $adminNav === 'returns' ? 'is-active' : '' ?>">Returns</a>
+      <a href="/admin/refunds.php" class="<?= $adminNav === 'refunds' ? 'is-active' : '' ?>">Refunds</a>
+      <a href="/admin/messages.php" class="<?= $adminNav === 'messages' ? 'is-active' : '' ?>">Messages</a>
       <a href="/admin/settings.php" class="<?= $adminNav === 'settings' ? 'is-active' : '' ?>">Settings</a>
     </nav>
     <main class="admin-content">

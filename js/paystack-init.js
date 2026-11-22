@@ -200,6 +200,7 @@
     if (terms && terms.checked) { fd.append('accept_terms', '1'); }
 
     fd.append('lines', JSON.stringify(Starr.cart ? Starr.cart.lines() : []));
+    var cp = form.querySelector('[name="coupon"]'); if (cp && cp.value) { fd.append('coupon', cp.value); }
     fd.append('csrf_token', (window.STARR && window.STARR.csrf) || '');
 
     var pop = form.querySelector('[data-pop-input]');

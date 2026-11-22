@@ -72,8 +72,12 @@
     var attempts = [
       [a1, suburb, city, postal],
       [a1, suburb, city],
+      [a1, suburb],
+      [a1, city],
       [suburb, city, postal],
-      [suburb, city]
+      [suburb, city],
+      [suburb, postal],
+      [postal]
     ].map(function (parts) { return parts.filter(Boolean).join(', '); })
      .filter(function (q, i, arr) { return q && arr.indexOf(q) === i; });
 
@@ -101,6 +105,7 @@
   function lookupAddress(showErrors) {
     setEstimate('loading', 'Finding your address…');
     return geocodeAddress().then(function (hit) {
+      hit = hit || hintFor();
       if (!hit) {
         setCoords(null, null);
         setEstimate('error', 'We could not find that address. Check the suburb and city, or tap "Use my location".');
@@ -158,7 +163,7 @@
     state.loading = true;
     return Starr.api(API + '?action=quote', {
       method: 'POST',
-      body: { lines: cartLines, mode: state.mode, lat: state.lat, lng: state.lng, branch_id: state.branchId }
+      body: { lines: cartLines, mode: state.mode, lat: state.lat, lng: state.lng, branch_id: state.branchId, coupon: ((document.querySelector('[name="coupon"]') || {}).value || '') }
     }).then(function (data) {
       if (seq !== quoteSeq) { return null; }
       state.loading = false;
@@ -345,7 +350,18 @@
     });
   }
 
+  var hint = null;
+  function hintFor() {
+    return hint && hint.suburb === val('suburb').toLowerCase() ? { lat: hint.lat, lng: hint.lng } : null;
+  }
+
   Starr.delivery = {
+    setLocation: function (lat, lng, suburb) {
+      hint = { lat: lat, lng: lng, suburb: String(suburb || '').toLowerCase() };
+      setCoords(lat, lng);
+      state.geocoded = [val('address1'), val('suburb'), val('city'), val('postal_code')].join('|');
+      requestQuote();
+    },
     state: function () {
       return { mode: state.mode, lat: state.lat, lng: state.lng, branchId: state.branchId, quote: state.quote };
     },

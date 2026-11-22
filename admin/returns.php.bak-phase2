@@ -1,0 +1,160 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../php/mail-helper.php';
+
+start_session();
+$admin = require_admin();
+
+$statuses = ['requested' => 'Requested', 'approved' => 'Approved', 'received' => 'Received', 'refunded' => 'Refunded', 'rejected' => 'Rejected'];
+$pill = ['requested' => 'pending', 'approved' => 'confirmed', 'received' => 'packing', 'refunded' => 'refunded', 'rejected' => 'failed'];
+$reasons = ['faulty' => 'Faulty or damaged', 'wrong' => 'Wrong item received', 'not_as_described' => 'Not as described', 'changed_mind' => 'Changed my mind'];
+$mailText = [
+    'approved' => 'Your return request has been approved. Reply to this email to arrange collection or drop-off.',
+    'received' => 'We have received your returned goods and are checking them.',
+    'refunded' => 'Your refund has been processed. Card refunds can take 5–10 business days to appear.',
+    'rejected' => 'We could not approve your return request. Reply to this email if you would like to discuss it.',
+];
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $id = (int) ($_POST['id'] ?? 0);
+    $back = '/admin/returns.php?id=' . $id;
+    if (!csrf_verify()) { flash_set('error', 'Your session expired. Please try again.'); header('Location: ' . $back); exit; }
+    $pdo = db();
+    try {
+        $s = $pdo->prepare('SELECT rr.*, o.customer_name, o.order_number FROM return_requests rr JOIN orders o ON o.id = rr.order_id WHERE rr.id = :id');
+        $s->execute([':id' => $id]);
+        $rr = $s->fetch();
+        if (!$rr) { throw new RuntimeException('Return request not found.'); }
+        $action = (string) ($_POST['action'] ?? '');
+
+        if ($action === 'save_notes') {
+            $pdo->prepare('UPDATE return_requests SET admin_notes = :n WHERE id = :id')
+                ->execute([':n' => mb_substr(trim((string) ($_POST['admin_notes'] ?? '')), 0, 4000) ?: null, ':id' => $id]);
+            flash_set('success', 'Notes saved.');
+        } elseif ($action === 'set_status') {
+            $new = (string) ($_POST['status'] ?? '');
+            if (!isset($statuses[$new])) { throw new RuntimeException('Unknown status.'); }
+            $note = '';
+            $pdo->beginTransaction();
+            if (!empty($_POST['restock']) && !str_contains((string) $rr['admin_notes'], 'Stock returned')) {
+                $it = $pdo->prepare('SELECT oi.product_id, ri.quantity FROM return_items ri JOIN order_items oi ON oi.id = ri.order_item_id WHERE ri.return_id = :r AND oi.product_id IS NOT NULL');
+                $it->execute([':r' => $id]);
+                $up = $pdo->prepare('UPDATE products SET stock_qty = stock_qty + :q WHERE id = :p');
+                foreach ($it->fetchAll() as $row) { $up->execute([':q' => (int) $row['quantity'], ':p' => (int) $row['product_id']]); }
+                $note = "\n[" . date('Y-m-d H:i') . '] Stock returned.';
+            }
+            $pdo->prepare('UPDATE return_requests SET status = :s, admin_notes = CONCAT(IFNULL(admin_notes,\'\'), :n) WHERE id = :id')->execute([':s' => $new, ':n' => $note, ':id' => $id]);
+            $pdo->commit();
+            if (!empty($_POST['notify']) && isset($mailText[$new])) {
+                $body = '<p>Hi ' . e(explode(' ', trim((string) $rr['customer_name']))[0]) . ',</p><p>' . e($mailText[$new]) . '</p><p style="color:#51607C">Return <strong>' . e((string) $rr['request_number']) . '</strong> &middot; Order ' . e((string) $rr['order_number']) . '</p>';
+                send_mail((string) $rr['customer_email'], (string) $rr['customer_name'], 'Return ' . $rr['request_number'] . ': ' . $statuses[$new], mail_layout('Return ' . strtolower($statuses[$new]), $body));
+            }
+            flash_set('success', 'Status updated to ' . $statuses[$new] . '.' . ($new === 'refunded' ? ' Remember: this does not send money. Refund in Paystack or your bank.' : ''));
+        }
+    } catch (Throwable $e) {
+        if (isset($pdo) && $pdo->inTransaction()) { $pdo->rollBack(); }
+        if (!($e instanceof RuntimeException)) { error_log('[StarrSavers][admin-returns] ' . $e->getMessage()); }
+        flash_set('error', $e instanceof RuntimeException ? $e->getMessage() : 'Something went wrong. Nothing was changed.');
+    }
+    header('Location: ' . $back);
+    exit;
+}
+
+$id = (int) ($_GET['id'] ?? 0);
+$adminNav = 'returns';
+$adminTitle = 'Returns';
+require __DIR__ . '/_header.php';
+$pdo = db();
+
+if ($id):
+    $s = $pdo->prepare('SELECT rr.*, o.order_number, o.customer_name, o.customer_phone, o.id AS oid FROM return_requests rr JOIN orders o ON o.id = rr.order_id WHERE rr.id = :id');
+    $s->execute([':id' => $id]);
+    $rr = $s->fetch();
+    if (!$rr): ?>
+      <div class="empty-state"><h2>Return not found</h2><a class="btn" href="/admin/returns.php">Back</a></div>
+<?php else:
+        $i = $pdo->prepare('SELECT oi.product_name, oi.size, oi.sku, oi.unit_price, ri.quantity FROM return_items ri JOIN order_items oi ON oi.id = ri.order_item_id WHERE ri.return_id = :r');
+        $i->execute([':r' => $id]);
+        $lines = $i->fetchAll();
+        $value = 0.0; foreach ($lines as $l) { $value += (float) $l['unit_price'] * (int) $l['quantity']; }
+?>
+      <p style="margin-bottom:12px"><a href="/admin/returns.php">&larr; All returns</a></p>
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-bottom:16px">
+        <div><h1 style="font-size:var(--fs-2xl)"><?= e($rr['request_number']) ?></h1>
+          <p class="text-muted text-sm">Requested <?= e(fmt_date($rr['created_at'])) ?> &middot; <?= e($reasons[$rr['reason']] ?? $rr['reason']) ?></p></div>
+        <span class="pill pill--<?= e($pill[$rr['status']]) ?>" style="align-self:start"><?= e($statuses[$rr['status']]) ?></span>
+      </div>
+      <div class="split split--checkout">
+        <div>
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Items to return</h2>
+<?php foreach ($lines as $l): ?>
+            <div class="cart-line" style="grid-template-columns:1fr auto"><div class="cart-line__info"><span class="cart-line__title"><?= e($l['product_name']) ?><?= $l['size'] !== '' ? ' (' . e($l['size']) . ')' : '' ?></span><span class="cart-line__sub"><?= e($l['sku']) ?></span></div>
+              <span class="cart-line__total"><?= (int) $l['quantity'] ?> &times; <?= e(zar((float) $l['unit_price'])) ?></span></div>
+<?php endforeach; ?>
+            <p class="text-sm" style="margin-top:12px;text-align:right"><strong>Value: <?= e(zar($value)) ?></strong></p>
+<?php if ($rr['notes']): ?><hr><p class="text-sm"><strong>Customer notes:</strong><br><?= nl2br(e((string) $rr['notes'])) ?></p><?php endif; ?>
+          </section>
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:8px">Customer</h2>
+            <p><strong><?= e($rr['customer_name']) ?></strong><br><a href="mailto:<?= e($rr['customer_email']) ?>"><?= e($rr['customer_email']) ?></a><br><?= e($rr['customer_phone']) ?></p>
+            <p style="margin-top:8px"><a href="/admin/index.php?order=<?= (int) $rr['oid'] ?>">Open order <?= e($rr['order_number']) ?></a></p>
+          </section>
+        </div>
+        <aside style="display:grid;gap:16px;align-content:start">
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Update status</h2>
+            <form method="post" style="display:grid;gap:10px">
+              <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $rr['id'] ?>"><input type="hidden" name="action" value="set_status">
+              <select class="select" name="status" aria-label="Status"><?php foreach ($statuses as $k => $label): ?><option value="<?= e($k) ?>"<?= $k === $rr['status'] ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
+              <label class="check"><input type="checkbox" name="notify" value="1" checked><span>Email the customer</span></label>
+              <label class="check"><input type="checkbox" name="restock" value="1"><span>Goods are resellable: return stock</span></label>
+              <button class="btn btn--block" type="submit">Update</button>
+            </form>
+            <p class="text-xs text-muted" style="margin-top:8px">&ldquo;Refunded&rdquo; only records it. Send the money in Paystack or your bank first.</p>
+          </section>
+          <section class="card">
+            <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Notes</h2>
+            <form method="post" style="display:grid;gap:10px">
+              <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $rr['id'] ?>"><input type="hidden" name="action" value="save_notes">
+              <textarea class="textarea" name="admin_notes" rows="4" maxlength="4000" aria-label="Internal notes"><?= e((string) $rr['admin_notes']) ?></textarea>
+              <button class="btn btn--outline btn--block" type="submit">Save notes</button>
+            </form>
+          </section>
+        </aside>
+      </div>
+<?php endif;
+else:
+    $tab = (string) ($_GET['s'] ?? 'requested');
+    if ($tab !== 'all' && !isset($statuses[$tab])) { $tab = 'requested'; }
+    $counts = array_fill_keys(array_keys($statuses), 0);
+    foreach ($pdo->query('SELECT status, COUNT(*) c FROM return_requests GROUP BY status')->fetchAll() as $r) { $counts[$r['status']] = (int) $r['c']; }
+    $sql = 'SELECT rr.*, o.order_number, o.customer_name FROM return_requests rr JOIN orders o ON o.id = rr.order_id' . ($tab !== 'all' ? ' WHERE rr.status = :s' : '') . ' ORDER BY rr.created_at DESC LIMIT 100';
+    $q = $pdo->prepare($sql);
+    $q->execute($tab !== 'all' ? [':s' => $tab] : []);
+    $rows = $q->fetchAll();
+?>
+      <h1 style="margin-bottom:16px">Returns</h1>
+      <div class="tabs" style="margin-bottom:16px">
+<?php foreach ($statuses as $k => $label): ?>
+        <a class="tab<?= $tab === $k ? ' is-active' : '' ?>" href="/admin/returns.php?s=<?= e($k) ?>"><?= e($label) ?> <span class="badge" style="margin-left:4px"><?= $counts[$k] ?></span></a>
+<?php endforeach; ?>
+        <a class="tab<?= $tab === 'all' ? ' is-active' : '' ?>" href="/admin/returns.php?s=all">All</a>
+      </div>
+<?php if (!$rows): ?>
+      <div class="empty-state"><?= icon('return') ?><h2>No return requests here</h2></div>
+<?php else: ?>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Request</th><th>Order</th><th>Customer</th><th>Reason</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>
+<?php foreach ($rows as $r): ?>
+          <tr><td><a href="/admin/returns.php?id=<?= (int) $r['id'] ?>"><strong><?= e($r['request_number']) ?></strong></a></td><td><?= e($r['order_number']) ?></td><td><?= e($r['customer_name']) ?></td>
+              <td><?= e($reasons[$r['reason']] ?? $r['reason']) ?></td><td><?= e(fmt_date($r['created_at'])) ?></td>
+              <td><span class="pill pill--<?= e($pill[$r['status']]) ?>"><?= e($statuses[$r['status']]) ?></span></td>
+              <td><a class="btn btn--sm btn--secondary" href="/admin/returns.php?id=<?= (int) $r['id'] ?>">Open</a></td></tr>
+<?php endforeach; ?>
+        </tbody></table></div>
+<?php endif; endif; ?>
+
+<?php require __DIR__ . '/_footer.php'; ?>

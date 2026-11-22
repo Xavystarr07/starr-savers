@@ -1,0 +1,76 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Starr Savers — /admin/_header.php
+ * Shared admin layout (top bar + side/tab navigation). Every admin page does:
+ *     $adminTitle = 'Orders'; $adminNav = 'orders';
+ *     require __DIR__ . '/_header.php';   ...content...   require __DIR__ . '/_footer.php';
+ * Includes the login guard, so an admin page can never render for a non-admin.
+ */
+
+require_once __DIR__ . '/../includes/helpers.php';
+
+start_session();
+$admin = require_admin();           // redirects to /account.php?admin=1 when not an admin
+$storeName = (string) setting('store_name', 'Starr Savers');
+$adminTitle = $adminTitle ?? 'Admin';
+$adminNav   = $adminNav ?? '';
+
+/** Redirects back (PRG pattern) after a POST, with an optional flash message. */
+function admin_redirect(string $url, ?string $type = null, ?string $message = null): void
+{
+    if ($type !== null && $message !== null) { flash_set($type, $message); }
+    header('Location: ' . $url);
+    exit;
+}
+
+/** Call at the top of any admin POST handler. */
+function admin_require_csrf(string $backTo): void
+{
+    if (!csrf_verify()) {
+        admin_redirect($backTo, 'error', 'Your session expired. Please try again.');
+    }
+}
+
+$flash = flash_get();
+$assetVer = static function (string $path): string {
+    $f = STARR_ROOT . $path;
+    return $path . (is_file($f) ? '?v=' . filemtime($f) : '');
+};
+?>
+<!doctype html>
+<html lang="en-ZA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title><?= e($adminTitle) ?> · Admin · <?= e($storeName) ?></title>
+  <link rel="stylesheet" href="<?= e($assetVer('/css/theme.css')) ?>">
+  <link rel="stylesheet" href="<?= e($assetVer('/css/layout.css')) ?>">
+  <link rel="stylesheet" href="<?= e($assetVer('/css/components.css')) ?>">
+</head>
+<body class="admin-body">
+<div class="admin-shell">
+  <header class="admin-topbar">
+    <a class="brand" href="/admin/index.php"><span class="brand__mark"><?= icon('star') ?></span><span><?= e($storeName) ?> <span class="brand__sub">Admin</span></span></a>
+    <div style="display:flex;align-items:center;gap:8px">
+      <a class="btn btn--sm btn--light" href="/index.php" target="_blank" rel="noopener">View shop</a>
+      <form method="post" action="/php/auth-handler.php">
+        <?= csrf_field() ?><input type="hidden" name="action" value="logout">
+        <button class="btn btn--sm btn--ghost" style="--btn-fg:#fff;--btn-bg-hover:rgba(255,255,255,.14)" type="submit">Log out</button>
+      </form>
+    </div>
+  </header>
+
+  <div class="admin-main">
+    <nav class="admin-nav" aria-label="Admin">
+      <a href="/admin/index.php" class="<?= $adminNav === 'orders' ? 'is-active' : '' ?>">Orders</a>
+      <a href="/admin/products.php" class="<?= $adminNav === 'products' ? 'is-active' : '' ?>">Products</a>
+      <a href="/admin/returns.php" class="<?= $adminNav === 'returns' ? 'is-active' : '' ?>">Returns</a>
+      <a href="/admin/settings.php" class="<?= $adminNav === 'settings' ? 'is-active' : '' ?>">Settings</a>
+    </nav>
+    <main class="admin-content">
+<?php if ($flash): ?>
+      <div class="alert alert--<?= $flash['type'] === 'success' ? 'success' : 'error' ?>" role="status" style="margin-bottom:16px"><?= e($flash['message']) ?></div>
+<?php endif; ?>
