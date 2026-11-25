@@ -25,7 +25,7 @@ $faq = [
     ],
     'Returns & refunds' => [
         ['Can I return something?', 'Faulty, damaged or wrong items can be returned within 6 months. Clothing and general items can also be returned within ' . $days . ' days if you changed your mind. Start from the Returns page in your account. See our <a href="/legal.php#returns">returns policy</a>.'],
-        ['How long do refunds take?', 'Once approved, card refunds usually reach your account within 5 to 10 business days. EFT refunds are paid into the bank account you give us. You can follow every refund and print a refund slip from your order page.'],
+        ['How long do refunds take?', 'Once approved, card refunds can take up to 7 days to reach your account. EFT refunds are paid into the bank account you give us. You can follow every refund and print a refund slip from your order page.'],
     ],
     'Your account' => [
         ['Do I need an account to order?', 'No, you can check out as a guest. An account lets you track orders, save your address and keep a wishlist on every device.'],

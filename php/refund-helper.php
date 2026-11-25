@@ -192,7 +192,7 @@ function refund_email(array $r, string $stage): void
     } else {
         $title = 'Refund started';
         $msg   = 'We have started a refund of ' . $amt . ' for order <strong>' . e((string) $o['order_number']) . '</strong>.'
-               . ($card ? ' Card refunds usually reach your account within 5 to 10 business days.' : ' We will pay it into your bank account and email you when it is done.');
+               . ($card ? ' Card refunds can take up to 7 days to reach your account.' : ' We will pay it into your bank account and email you when it is done.');
     }
     send_mail((string) $o['customer_email'], (string) $o['customer_name'], $title . ' - ' . $o['order_number'],
         mail_layout($title, '<p>Hi ' . $first . ',</p><p>' . $msg . '</p><p style="color:#51607C">Refund reference <strong>' . e((string) $r['refund_number']) . '</strong></p>', 'View refund slip', $url));

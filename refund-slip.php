@@ -47,7 +47,7 @@ $row = static fn (string $k, string $v): string => '<tr><td class="k">' . e($k) 
   .amount{font-size:28px;font-weight:800;color:#0B3D91} .note{font-size:13px;color:#51607C;margin-top:16px}
   @media print{body{background:#fff}.bar{display:none}.slip{box-shadow:none;margin:0;max-width:none;border-radius:0}}
 </style></head><body>
-<div class="bar"><a href="javascript:history.back()">Back</a><button onclick="window.print()">Print</button></div>
+<div class="bar"><a href="<?= e($isAdmin ? '/admin/refunds.php?id=' . (int) $r['id'] : '/account.php?order=' . rawurlencode((string) $r['order_number']) . '&t=' . order_token((string) $r['order_number'])) ?>">Back</a><button onclick="window.print()">Print</button></div>
 <div class="slip">
   <div class="top">
     <div><div class="store"><?= e($store) ?></div><div class="small"><?= e((string) setting('legal_company_name')) ?><br>Reg. <?= e((string) setting('legal_reg_number')) ?> &middot; VAT <?= e((string) setting('vat_number')) ?><br><?= e((string) setting('legal_physical_address')) ?><br><?= e((string) setting('store_email')) ?> &middot; <?= e((string) setting('store_phone')) ?></div></div>
@@ -71,7 +71,7 @@ $row = static fn (string $k, string $v): string => '<tr><td class="k">' . e($k) 
   </table>
   <p class="note"><?= $r['status'] === 'processed'
       ? 'This refund has been completed.' . ($card ? ' Your bank can take a few more days to show it on your statement.' : '')
-      : ($card ? 'This refund has been sent to the card payment provider. Card refunds usually reach your account within 5 to 10 business days.' : 'We will pay this refund into your bank account and email you when it is done.') ?></p>
+      : ($card ? 'This refund has been sent to the card payment provider. Card refunds can take up to 7 days to reach your account (expected by ' . date('j M Y', strtotime((string) $r['created_at'] . ' +7 days')) . ').' : 'We will pay this refund into your bank account and email you when it is done.') ?></p>
   <p class="note">Questions? Email <?= e((string) setting('store_email')) ?> and quote <?= e((string) $r['refund_number']) ?>. Printed <?= e(date('j M Y, H:i')) ?>.</p>
 </div>
 </body></html>

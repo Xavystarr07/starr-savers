@@ -27,6 +27,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $s = $pdo->prepare('SELECT * FROM orders WHERE id = :id'); $s->execute([':id' => $oid]);
             $o = $s->fetch();
             if (!$o) { throw new RuntimeException('Order not found.'); }
+            $rid = (int) ($_POST['return_id'] ?? 0); if ($rid) { require_once __DIR__ . '/../php/returns-helper.php'; return_assert_refundable($rid, money_in($_POST['amount'] ?? null) ?? 0.0); }
             $reason = mb_substr(trim((string) ($_POST['reason'] ?? '')), 0, 255);
             if ($reason === '') { throw new RuntimeException('Please give a reason for the refund.'); }
             $r = refund_create($o, money_in($_POST['amount'] ?? null) ?? 0.0, $reason, mb_substr(trim((string) ($_POST['customer_note'] ?? '')), 0, 200),
@@ -93,6 +94,7 @@ if ($newId):
         $done = refunded_total((int) $o['id']);
         $avail = max(0.0, round((float) $o['total'] - $done, 2));
         $retId = (int) ($_GET['return'] ?? 0);
+        $retCap = null; if ($retId) { require_once __DIR__ . '/../php/returns-helper.php'; $lgx = return_logistics($retId); $retCap = $lgx['refund_amount'] !== null ? (float) $lgx['refund_amount'] : null; }
         $card = $o['payment_method'] === 'paystack';
 ?>
       <p style="margin-bottom:12px"><a href="/admin/index.php?order=<?= (int) $o['id'] ?>">&larr; Back to order <?= e($o['order_number']) ?></a></p>
@@ -103,7 +105,7 @@ if ($newId):
       <div class="split split--checkout">
         <form method="post" class="card" style="display:grid;gap:14px" onsubmit="return confirm('Send this refund now? <?= $card ? 'It is taken from your Paystack balance and cannot be undone.' : 'This only records it. You still pay the customer from your bank.' ?>')">
           <?= csrf_field() ?><input type="hidden" name="action" value="create"><input type="hidden" name="order_id" value="<?= (int) $o['id'] ?>"><input type="hidden" name="return_id" value="<?= $retId ?>">
-          <div class="field"><label class="req" for="amount">Amount to refund (R)</label><input class="input" id="amount" name="amount" inputmode="decimal" value="<?= e(number_format($avail, 2, '.', '')) ?>" required><span class="field__hint">Up to <?= e(zar($avail)) ?>. Change it for a part refund.</span></div>
+          <div class="field"><label class="req" for="amount">Amount to refund (R)</label><input class="input" id="amount" name="amount" inputmode="decimal" value="<?= e(number_format($retCap !== null ? min($retCap, $avail) : $avail, 2, '.', '')) ?>" required><span class="field__hint">Up to <?= e(zar($avail)) ?>. Change it for a part refund.</span></div>
           <div class="field"><label class="req" for="reason">Reason (kept on file)</label><input class="input" id="reason" name="reason" maxlength="255" placeholder="e.g. Faulty item returned" required></div>
           <div class="field"><label for="cn">Note to customer <span class="text-faint">(optional)</span></label><input class="input" id="cn" name="customer_note" maxlength="200"></div>
           <label class="check"><input type="checkbox" name="notify" value="1" checked><span>Email the customer (start and completion, with the refund slip)</span></label>
@@ -159,6 +161,7 @@ if ($id):
 <?php if ($r['paystack_refund_id'] !== ''): ?><div class="summary__row"><dt>Paystack refund ID</dt><dd><?= e((string) $r['paystack_refund_id']) ?></dd></div><?php endif; ?>
 <?php if ($r['paystack_status']): ?><div class="summary__row"><dt>Paystack status</dt><dd><?= e((string) $r['paystack_status']) ?></dd></div><?php endif; ?>
 <?php if ($r['bank_reference']): ?><div class="summary__row"><dt>Bank reference</dt><dd><?= e((string) $r['bank_reference']) ?></dd></div><?php endif; ?>
+<?php if ($r['status'] === 'processing'): ?><div class="summary__row"><dt>Expected by</dt><dd><?= e(date('j M Y', strtotime((string) $r['created_at'] . ' +7 days'))) ?></dd></div><?php endif; ?>
 <?php if ($r['processed_at']): ?><div class="summary__row"><dt>Completed</dt><dd><?= e(fmt_date($r['processed_at'])) ?></dd></div><?php endif; ?>
           </dl>
           <p style="margin-top:12px"><a href="/admin/index.php?order=<?= (int) $r['order_id'] ?>">Open the order</a></p>

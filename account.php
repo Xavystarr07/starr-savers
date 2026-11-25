@@ -105,7 +105,7 @@ if ($orderNumber !== ''):
 <?php foreach ($orderRefunds as $rf): ?>
             <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--color-border-soft);flex-wrap:wrap">
               <span><strong><?= e($rf['refund_number']) ?></strong> <span class="text-muted text-sm">&middot; <?= e(zar((float) $rf['amount'])) ?></span><br><span class="pill pill--<?= e(refund_pill((string) $rf['status'])) ?>"><?= e(refund_label((string) $rf['status'])) ?></span>
-<?php if ($rf['status'] === 'processing'): ?> <span class="text-xs text-muted">Card refunds take 5 to 10 business days to reach your account.</span><?php endif; ?></span>
+<?php if ($rf['status'] === 'processing'): ?> <span class="text-xs text-muted">Card refunds can take up to 7 days to reach your account.</span><?php endif; ?></span>
 <?php if ($rf['status'] !== 'failed'): ?><a class="btn btn--sm btn--outline" href="/refund-slip.php?r=<?= e(rawurlencode((string) $rf['refund_number'])) ?>&t=<?= e($token) ?>" target="_blank" rel="noopener">Refund slip</a><?php endif; ?>
             </div>
 <?php endforeach; ?>

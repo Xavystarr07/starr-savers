@@ -177,6 +177,7 @@ $requests = $q->fetchAll();
 </section>
 <?php endif; ?>
 
+<?php if ($requests): require_once __DIR__ . '/php/returns-helper.php'; foreach ($requests as $rq) { return_status_card($rq); } $requests = []; endif; ?>
 <?php if ($requests): ?>
 <section class="card" style="margin-top:16px">
   <h2 style="font-size:var(--fs-lg);margin-bottom:12px">Your return requests</h2>

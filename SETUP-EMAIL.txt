@@ -1,0 +1,36 @@
+EMAIL SETUP (about 10 minutes)
+==============================
+
+1. Copy into your project (say Yes to merge folders):
+     php/PHPMailer/        -> C:\xampp\htdocs\starr-savers-local\php\PHPMailer\
+     send-test-mail.php    -> C:\xampp\htdocs\starr-savers-local\
+
+2. Pick a free SMTP service and note its 4 details (host, port, username, password).
+   Easy options:
+     - Brevo (brevo.com): free 300 emails/day. SMTP host smtp-relay.brevo.com, port 587.
+       Username and SMTP key are under SMTP & API in your account.
+     - Gmail (testing only): smtp.gmail.com, port 587, needs 2-step login on and an
+       "App password" as the password.
+   Important: the From address must be one the service lets you send from
+   (Brevo: add and verify your sender address first).
+
+3. Edit config/app.local.php and replace these values:
+     'SMTP_HOST'  => 'smtp-relay.brevo.com',
+     'SMTP_PORT'  => 587,
+     'SMTP_USER'  => 'your SMTP login',
+     'SMTP_PASS'  => 'your SMTP key',
+     'SMTP_FROM_EMAIL' => 'your verified sender address',
+     'ADMIN_NOTIFY_EMAIL' => 'an inbox you can actually read',
+
+4. Log in to admin in the same browser, then open:
+     http://localhost:8081/send-test-mail.php
+   It should say RESULT: SENT. If it says FAILED, the text underneath shows why
+   (wrong password, sender not verified, port blocked...).
+
+5. DELETE send-test-mail.php when done.
+
+6. Real test: place an EFT order, then reset a password. You should get the
+   confirmation and the reset email.
+
+Going live later: use the same steps on the server's own config/app.local.php.
+Never upload your local app.local.php.
